@@ -1,0 +1,12 @@
+node_modules/
+.env
+env.local
+.DS_Store
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Do NOT commit credentials
+aws access +secret access.csv
+AWS Login Details.txt
+readME.txt

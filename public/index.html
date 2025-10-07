@@ -1,0 +1,111 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OneDrive Clone (S3)</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+      th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
+      th { background: #fafafa; }
+      button { padding: 6px 10px; }
+      .muted { color: #666; font-size: 12px; }
+      .container { max-width: 960px; margin: 0 auto; }
+      input[type="text"] { width: 320px; padding: 6px 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>OneDrive Clone</h2>
+      <div class="row">
+        <input id="prefix" type="text" placeholder="folder/ (optional prefix)" />
+        <input id="file" type="file" />
+        <button id="upload">Upload</button>
+        <button id="refresh">Refresh</button>
+        <span id="status" class="muted"></span>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Key</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const tbody = document.getElementById('tbody');
+      const statusEl = document.getElementById('status');
+      const prefixEl = document.getElementById('prefix');
+      const fileEl = document.getElementById('file');
+
+      function fmtSize(bytes){
+        if(bytes == null) return '';
+        const units = ['B','KB','MB','GB','TB'];
+        let i=0, n=bytes;
+        while(n>=1024 && i<units.length-1){ n/=1024; i++; }
+        return `${n.toFixed(1)} ${units[i]}`;
+      }
+
+      async function list(){
+        statusEl.textContent = 'Loading...';
+        const prefix = prefixEl.value || '';
+        const res = await fetch(`/api/files?prefix=${encodeURIComponent(prefix)}`);
+        const data = await res.json();
+        statusEl.textContent = '';
+        tbody.innerHTML = '';
+        (data.items||[]).forEach(item => {
+          const tr = document.createElement('tr');
+          const key = item.key;
+          tr.innerHTML = `
+            <td>${key}</td>
+            <td>${fmtSize(item.size)}</td>
+            <td>${item.lastModified ? new Date(item.lastModified).toLocaleString() : ''}</td>
+            <td>
+              <button data-dl="${key}">Download</button>
+              <button data-del="${key}">Delete</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+
+      document.getElementById('refresh').addEventListener('click', list);
+
+      document.getElementById('upload').addEventListener('click', async () => {
+        const f = fileEl.files[0];
+        if(!f) return alert('Choose a file first');
+        const prefix = prefixEl.value || '';
+        const key = prefix ? `${prefix.replace(/(^\/+)|(\/+?$)/g,'')}/${f.name}`.replace(/^\//,'') : f.name;
+        const upRes = await fetch('/api/upload-url', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, contentType: f.type || 'application/octet-stream' })
+        });
+        const { url } = await upRes.json();
+        const s3Res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f });
+        if(!s3Res.ok){ alert('Upload failed'); return; }
+        statusEl.textContent = 'Uploaded';
+        await list();
+      });
+
+      tbody.addEventListener('click', async (e) => {
+        const dl = e.target.getAttribute && e.target.getAttribute('data-dl');
+        const del = e.target.getAttribute && e.target.getAttribute('data-del');
+        if (dl) {
+          const res = await fetch(`/api/download-url?key=${encodeURIComponent(dl)}`);
+          const { url } = await res.json();
+          window.open(url, '_blank');
+        } else if (del) {
+          if(!confirm('Delete this file?')) return;
+          await fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: del }) });
+          await list();
+        }
+      });
+
+      list();
+    </script>
+  </body>
+  </html>
+
