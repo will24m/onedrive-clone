@@ -1,10 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OneDrive Clone (S3)</title>
     <style>
+      /* Basic layout styling for a clean, simple UI */
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
       .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
       table { border-collapse: collapse; width: 100%; margin-top: 16px; }
@@ -20,13 +21,18 @@
     <div class="container">
       <h2>OneDrive Clone</h2>
       <div class="row">
+        <!-- Prefix works like a folder path (e.g., photos/). Empty means bucket root. -->
         <input id="prefix" type="text" placeholder="folder/ (optional prefix)" />
+        <!-- File selector for uploads -->
         <input id="file" type="file" />
+        <!-- Upload triggers presigned PUT flow -->
         <button id="upload">Upload</button>
+        <!-- Refresh reloads the list from the API -->
         <button id="refresh">Refresh</button>
         <span id="status" class="muted"></span>
       </div>
 
+      <!-- Table showing S3 objects -->
       <table>
         <thead>
           <tr><th>Key</th><th>Size</th><th>Last Modified</th><th>Actions</th></tr>
@@ -36,11 +42,13 @@
     </div>
 
     <script>
+      // DOM references for UI updates
       const tbody = document.getElementById('tbody');
       const statusEl = document.getElementById('status');
       const prefixEl = document.getElementById('prefix');
       const fileEl = document.getElementById('file');
 
+      // Human-friendly size formatting for bytes
       function fmtSize(bytes){
         if(bytes == null) return '';
         const units = ['B','KB','MB','GB','TB'];
@@ -49,6 +57,7 @@
         return `${n.toFixed(1)} ${units[i]}`;
       }
 
+      // Fetch current S3 object list from backend
       async function list(){
         statusEl.textContent = 'Loading...';
         const prefix = prefixEl.value || '';
@@ -64,7 +73,9 @@
             <td>${fmtSize(item.size)}</td>
             <td>${item.lastModified ? new Date(item.lastModified).toLocaleString() : ''}</td>
             <td>
+              <!-- Download uses a presigned GET URL opened in a new tab -->
               <button data-dl="${key}">Download</button>
+              <!-- Delete calls backend to remove object from S3 -->
               <button data-del="${key}">Delete</button>
             </td>
           `;
@@ -72,24 +83,31 @@
         });
       }
 
+      // Manual refresh button
       document.getElementById('refresh').addEventListener('click', list);
 
+      // Upload flow: request presigned URL then PUT file directly to S3
       document.getElementById('upload').addEventListener('click', async () => {
         const f = fileEl.files[0];
         if(!f) return alert('Choose a file first');
         const prefix = prefixEl.value || '';
-        const key = prefix ? `${prefix.replace(/(^\/+)|(\/+?$)/g,'')}/${f.name}`.replace(/^\//,'') : f.name;
+        // Normalize prefix and build final object key (ASCII-only, no smart quotes)
+        const p = (prefix || '').replace(/(^\/+)|(\/+?$)/g, '');
+        const key = p ? `${p}/${f.name}` : f.name;
+        // Ask backend for a presigned PUT URL
         const upRes = await fetch('/api/upload-url', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key, contentType: f.type || 'application/octet-stream' })
         });
         const { url } = await upRes.json();
+        // Upload bytes directly to S3 using presigned URL
         const s3Res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': f.type || 'application/octet-stream' }, body: f });
         if(!s3Res.ok){ alert('Upload failed'); return; }
         statusEl.textContent = 'Uploaded';
         await list();
       });
 
+      // Handle table action buttons for download/delete
       tbody.addEventListener('click', async (e) => {
         const dl = e.target.getAttribute && e.target.getAttribute('data-dl');
         const del = e.target.getAttribute && e.target.getAttribute('data-del');
@@ -104,8 +122,8 @@
         }
       });
 
+      // Initial load
       list();
     </script>
   </body>
   </html>
-
