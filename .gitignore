@@ -1,0 +1,30 @@
+node_modules
+.env
+env.local
+.DS_Store
+npm-debug.log*
+package-lock.json
+
+# Do NOT commit credentials
+aws access +secret access.csv
+AWS Login Details.txt
+readME.txt
+
+# Build outputs
+frontend/
+dist
+
+# Local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE settings
+.vscode/
+.idea/
+.cursor/
+.cursorrules
+.cursorrules.txt
+.cursorrules.md
+.cursorrules.txt
